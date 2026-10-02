@@ -38,7 +38,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+          if (cacheWhitelist.indexOf(cacheName) === -1 && cacheName.startsWith('logic-generator-')) {
             return caches.delete(cacheName);
           }
         })
