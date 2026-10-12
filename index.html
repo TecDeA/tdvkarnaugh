@@ -3,26 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-	
-	    <!-- PWA Meta Tags -->
+        
+            <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-	
+        
     <title>Generador de Función Lógica</title>
-	
-	
-	  <!-- Favicon y Apple Touch Icon -->
+        
+        
+          <!-- Favicon y Apple Touch Icon -->
     <link rel="icon" href="icons/icon-192x192.png" type="image/png">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
     
     <!-- Manifest -->
     <link rel="manifest" href="manifest.json">
-	
-	
+        
+        
     <!-- Tailwind CSS CDN -->
-	<script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom styles for better aesthetics */
         body {
@@ -147,7 +147,14 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">Generador de Función Lógica</h1>
+        <!-- Banner principal con chip de versión dinámica (extraída del Service Worker) -->
+        <div class="flex items-center justify-center gap-3 flex-wrap mb-6">
+            <h1 class="text-3xl font-bold text-center text-gray-800">Generador de Función Lógica</h1>
+            <span id="versionChip" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold select-none whitespace-nowrap" title="Versión de la aplicación (obtenida del Service Worker)">
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                <span id="versionText">v…</span>
+            </span>
+        </div>
 
         <!-- Variable Selection Section -->
         <div class="mb-8 p-6 bg-blue-50 rounded-lg shadow-inner">
@@ -758,6 +765,112 @@
         document.addEventListener('DOMContentLoaded', () => {
             generateTruthTable(currentNumVariables);
         });
+    </script>
+
+    <script>
+        // ===== Registro del Service Worker y chip de versión dinámica =====
+        (function () {
+            'use strict';
+
+            const versionChip = document.getElementById('versionChip');
+            const versionText = document.getElementById('versionText');
+
+            function setVersion(value) {
+                if (!value) {
+                    // Sin datos de versión: ocultar el chip para no mostrar nada falso
+                    versionChip.classList.add('hidden');
+                    return;
+                }
+                versionText.textContent = value;
+            }
+
+            // Plan A: preguntar la versión directamente al Service Worker (MessageChannel)
+            function getVersionFromSW(registration) {
+                return new Promise(resolve => {
+                    const worker = registration.active || registration.waiting || registration.installing;
+                    if (!worker) {
+                        resolve(null);
+                        return;
+                    }
+
+                    let settled = false;
+                    const finish = (value) => {
+                        if (!settled) {
+                            settled = true;
+                            resolve(value);
+                        }
+                    };
+
+                    const channel = new MessageChannel();
+                    channel.port1.onmessage = (event) => {
+                        finish(event.data && event.data.version ? event.data.version : null);
+                    };
+
+                    const ask = () => worker.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
+
+                    if (worker.state === 'activated') {
+                        ask();
+                    } else {
+                        // Primera visita: esperar a que el SW se active antes de preguntarle
+                        worker.addEventListener('statechange', () => {
+                            if (worker.state === 'activated') ask();
+                        });
+                    }
+
+                    // Timeout de seguridad: si el SW no responde, pasar al plan B
+                    setTimeout(() => finish(null), 2000);
+                });
+            }
+
+            // Plan B (fallback): extraer la versión parseando el propio fichero sw.js
+            async function getVersionFromSource() {
+                try {
+                    const response = await fetch('./sw.js', { cache: 'no-store' });
+                    if (!response.ok) return null;
+                    const code = await response.text();
+                    let match = code.match(/const\s+VERSION\s*=\s*['"]([^'"]+)['"]/);
+                    if (match) return match[1];
+                    match = code.match(/logic-generator-(v[\w.\-]+)/);
+                    if (match) return match[1];
+                } catch (error) {
+                    // Sin conexión o sin servidor: no hay versión disponible
+                }
+                return null;
+            }
+
+            async function initVersion() {
+                let version = null;
+
+                if ('serviceWorker' in navigator) {
+                    try {
+                        const registration = await navigator.serviceWorker.register('./sw.js');
+                        version = await getVersionFromSW(registration);
+
+                        // Si un nuevo SW toma el control (tras actualizar la app),
+                        // refrescar el chip en vivo sin recargar la página
+                        navigator.serviceWorker.addEventListener('controllerchange', () => {
+                            navigator.serviceWorker.getRegistration().then(reg => {
+                                if (reg) getVersionFromSW(reg).then(setVersion);
+                            });
+                        });
+                    } catch (error) {
+                        // P. ej. al abrir el archivo con file:// o si falla el registro
+                    }
+                }
+
+                if (!version) {
+                    version = await getVersionFromSource();
+                }
+
+                setVersion(version);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initVersion);
+            } else {
+                initVersion();
+            }
+        })();
     </script>
 </body>
 </html>
