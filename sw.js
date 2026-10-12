@@ -1,5 +1,9 @@
 // service-worker.js
-const CACHE_NAME = 'logic-generator-v1.0';
+
+// Única fuente de verdad de la versión. Al cambiarla, se actualiza
+// el chip del banner y se invalida la caché antigua automáticamente.
+const VERSION = 'v1.0';
+const CACHE_NAME = `logic-generator-${VERSION}`;
 const urlsToCache = [
   './',
   './index.html',
@@ -8,6 +12,7 @@ const urlsToCache = [
 
 // Instalación del Service Worker
 self.addEventListener('install', event => {
+  self.skipWaiting(); // activar la nueva versión inmediatamente tras instalarse
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
@@ -43,6 +48,17 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim()) // tomar el control de la página inmediatamente
   );
+});
+
+// Responder con la versión actual cuando la página la solicita
+// (usado por el chip del banner en index.html)
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'GET_VERSION') {
+    const port = event.ports && event.ports[0];
+    if (port) {
+      port.postMessage({ version: VERSION, cache: CACHE_NAME });
+    }
+  }
 });
