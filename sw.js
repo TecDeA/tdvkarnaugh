@@ -2,7 +2,7 @@
 
 // Única fuente de verdad de la versión. Al cambiarla, se actualiza
 // el chip del banner y se invalida la caché antigua automáticamente.
-const VERSION = 'v1.1';
+const VERSION = 'v1.2';
 const CACHE_NAME = `logic-generator-${VERSION}`;
 const urlsToCache = [
   './',
